@@ -15,7 +15,7 @@ mass2 = 1
 K = 1000.0
 damp = 0.1
 L0 = 1.0
-dt = 0.005
+dt = 0.001
 
 
 def drawAxes():
