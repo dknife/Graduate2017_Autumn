@@ -1,0 +1,53 @@
+from OpenGL.GLUT import *
+from OpenGL.GL import *
+from OpenGL.GLU import *
+
+import numpy as np
+
+
+x = np.array( [ [1,1,2], [1,2,3] ])
+
+
+M00 = np.array(
+    [[1,2,1], [2,3,4], [1,1,4]])
+M01 = np.array(
+    [[0,1,1], [1,0,1], [0,1,0]])
+M10 = np.array(
+    [[0,0,0], [0,3,0], [2,3,1]])
+M11 = np.array(
+    [[1,1,0], [0,3,0], [0,0,5]])
+
+
+def convertLongVector(x) :
+    longX = np.zeros(shape=(len(x)*3,))
+    for i in range(0, len(x)) :
+        for j in range(0,3) :
+            longX[i*3+j] = x[i,j]
+    return longX
+
+def set33SubMatrix(M, i, j, m) :
+    for row in range(0,3) :
+        for col in range(0,3) :
+            M[i*3+row, j*3+col] = m[row,col]
+
+longX = convertLongVector(x)
+bigM = np.zeros(shape=(len(x)*3, len(x)*3))
+
+set33SubMatrix(bigM, 0,0, M00)
+set33SubMatrix(bigM, 0,1, M01)
+set33SubMatrix(bigM, 1,0, M10)
+set33SubMatrix(bigM, 1,1, M11)
+
+
+print(longX)
+print(bigM)
+
+b = bigM.dot(longX)
+print(b)
+Minv = np.linalg.inv(bigM)
+print(Minv)
+x = Minv.dot(b)
+print(x)
+
+
+

@@ -18,8 +18,8 @@ for i in range(0, len(Verts)):
     Force.append([0.0, 0.0, 0.0])
     Mass.append(1.0)
 
-Vel = np.array(Vel);
-Force = np.array(Force);
+Vel = np.array(Vel)
+Force = np.array(Force)
 
 Springs = np.array(
     [[0, 1], [1, 2],
@@ -32,15 +32,14 @@ Springs = np.array(
      [1,5], [2,4],
      [3,7], [4,6],
      [4,8], [5,7]], np.int32)
-
-sqrt2 = np.sqrt(2.0)
-L0 = [ 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, sqrt2, sqrt2, sqrt2, sqrt2, sqrt2, sqrt2, sqrt2, sqrt2]
 gravity = np.array([0, -9.8, 0])
 
-K = 1000000.0
-damp = 0.1
-dt = 0.001
+K = 900.0
+damp = 0.0
+sqrt2 = np.sqrt(2.0)
+L0 = [ 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, sqrt2, sqrt2, sqrt2, sqrt2, sqrt2, sqrt2, sqrt2, sqrt2]
 
+dt = 0.03
 
 def drawAxes():
     glBegin(GL_LINES)
@@ -88,24 +87,23 @@ def computeForces(springs, verts) :
         force[idx1] = force[idx1] - F + f_damp
     return force
 
-def copyVectors(verts, n) :
-    v = np.zeros( (n,3), dtype=np.float64)
-    for i in range(n) :
+def copyVectors(verts, n):
+    v = np.zeros((n, 3), dtype=np.float64)
+    for i in range(n):
         v[i] = verts[i]
 
     return v
 
-def updateLocation(locs, force, vel, h) :
+def updateLocation(locs, force, vel, h):
     for i in range(0, len(locs)):
-        vel[i] = vel[i] + (force[i]/ Mass[i] + gravity) * h
+        vel[i] = vel[i] + (force[i] / Mass[i] + gravity) * h
         if i is not 0 and i is not 2:
-            locs[i] = locs[i] + vel[i]* h
+            locs[i] = locs[i] + vel[i] * h
 
-def move():
+def moveRK():
     global Verts, Springs, Vel, Force, Mass, K, damp, L0, dt, gravity
 
     v = copyVectors(Verts, len(Verts))
-
     vel1 = copyVectors(Vel, len(Vel))
     force1 = computeForces(Springs, v)
 
@@ -115,7 +113,7 @@ def move():
     force2 = computeForces(Springs, v)
 
     v = copyVectors(Verts, len(Verts))
-    vel3 = copyVectors(vel2, len(vel2))
+    vel3 = copyVectors(vel1, len(vel2))
     updateLocation(v, force2, vel3, 0.5 * dt)
     force3 = computeForces(Springs, v)
 
@@ -124,10 +122,48 @@ def move():
     updateLocation(v, force3, vel4, dt)
     force4 = computeForces(Springs, v)
 
-    Force = (force1+2.0*force2+2.0*force3+force4)*(1.0/6.0)
-    Vel = (vel1 + 2.0*vel2 + 2.0*vel3 + vel4)*(1.0/6.0)
-    print(Vel)
+    Force = (force1+2.0*force2+2.0*force3+force4)/6.0
+    Vel = (vel1 + 2.0*vel2 + 2.0*vel3 + vel4)/6.0
     updateLocation(Verts, Force, Vel, dt)
+
+    glutPostRedisplay()  ## Hey! Draw Function! Draw!
+
+def moveMidPoint() :
+    global Verts, Springs, Vel, Force, Mass, K, damp, L0, dt, gravity
+    v = copyVectors(Verts, len(Verts))
+    velTemp = copyVectors(Vel, len(Vel))
+    Force = computeForces(Springs, v)
+    updateLocation(v, Force, velTemp, 0.5*dt)
+    Force = computeForces(Springs, v)
+    updateLocation(Verts, Force, Vel, dt)
+    glutPostRedisplay()  ## Hey! Draw Function! Draw!
+
+def moveEuler():
+    global Verts, Springs, Vel, Force, Mass, K, damp, L0, dt, gravity
+
+    # Force Initialization
+    for i in range(0, len(Force)):
+        Force[i] = np.array([0, 0, 0])
+
+    # Compute spring force for each spring and accumulate it for each vert
+    for i in range(0, len(Springs)):
+        idx0 = Springs[i][0]
+        idx1 = Springs[i][1]
+        p0 = Verts[idx0]
+        p1 = Verts[idx1]
+        L = np.linalg.norm(p1 - p0)
+        dir = (p1 - p0) / L
+        d = L - L0[i]
+        F = K * d * dir
+        f_damp = -np.dot(Vel[idx0],dir)*damp*dir
+        Force[idx0] = Force[idx0] + F + f_damp
+        f_damp =  np.dot(Vel[idx1], -dir) * damp * dir
+        Force[idx1] = Force[idx1] - F + f_damp
+
+    for i in range(0, len(Verts)):
+        Vel[i] = Vel[i] + (Force[i]/ Mass[i] + gravity) * dt
+        if i is not 0 and i is not 2:
+            Verts[i] = Verts[i] + Vel[i] * dt
 
     glutPostRedisplay()  ## Hey! Draw Function! Draw!
 
@@ -135,9 +171,6 @@ def move():
 def draw():
     global Verts, Springs
     glClear(GL_COLOR_BUFFER_BIT)
-    glMatrixMode(GL_PROJECTION)
-    glLoadIdentity()
-    gluPerspective(60, 1.0, 0.1, 1000)
     glMatrixMode(GL_MODELVIEW)
     glLoadIdentity()
     gluLookAt(0.5, 2.0, 5.0, 0.0, 2.0, 0.0, 0.0, 1.0, 0.0)
@@ -150,6 +183,13 @@ def draw():
 def GLinit():
     glClearColor(0.5, 0.5, 0.5, 1)
 
+def reshape(w, h) :
+    aspectRatio = w/h
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    gluPerspective(60, aspectRatio, 0.1, 1000)
+    glViewport(0, 0, w, h)
+
 
 glutInit(sys.argv)
 glutInitDisplayMode(GLUT_SINGLE | GLUT_RGBA)
@@ -158,7 +198,10 @@ glutInitWindowPosition(100, 100)
 glutCreateWindow(b"OpenGL with Python")
 GLinit()
 glutDisplayFunc(draw)
-glutIdleFunc(move)
+glutReshapeFunc(reshape)
+#glutIdleFunc(moveEuler)
+#glutIdleFunc(moveMidPoint)
+glutIdleFunc(moveRK)
 glutMainLoop()
 
 # End of program
