@@ -1,0 +1,195 @@
+from OpenGL.GLUT import *
+from OpenGL.GL import *
+from OpenGL.GLU import *
+import numpy as np
+
+Verts = np.array(
+    [[0, 2, 0], [1, 2, 0], [2, 2, 0],
+     [0, 2, 1], [1, 2, 1], [2, 2, 1],
+     [0, 2, 2], [1, 2, 2], [2, 2, 2]], np.float64
+)
+
+Vel = []
+Force = []
+Mass = []
+
+for i in range(0, len(Verts)):
+    Vel.append([0.0, 0.0, 0.0])
+    Force.append([0.0, 0.0, 0.0])
+    Mass.append(1.0)
+
+Vel = np.array(Vel)
+Force = np.array(Force)
+
+Springs = np.array(
+    [[0, 1], [1, 2],
+     [3, 4], [4, 5],
+     [6, 7], [7, 8],
+     [0, 3], [3, 6],
+     [1, 4], [4, 7],
+     [2, 5], [5, 8],
+     [0,4], [1,3],
+     [1,5], [2,4],
+     [3,7], [4,6],
+     [4,8], [5,7]], np.int32)
+gravity = np.array([0, -9.8, 0])
+
+K = 500000000.0
+damp = 0.5
+sqrt2 = np.sqrt(2.0)
+L0 = [ 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, sqrt2, sqrt2, sqrt2, sqrt2, sqrt2, sqrt2, sqrt2, sqrt2]
+
+dt = 0.001
+
+
+
+
+
+def drawSpring(loc1, loc2):
+    glColor3f(1, 1, 1)
+    glPushMatrix()
+    glTranslatef(loc1[0], loc1[1], loc1[2])
+    glutWireSphere(0.1, 10, 10)
+    glPopMatrix()
+    glPushMatrix()
+    glTranslatef(loc2[0], loc2[1], loc2[2])
+    glutWireSphere(0.1, 10, 10)
+    glPopMatrix()
+    glBegin(GL_LINES)
+    glVertex3f(loc1[0], loc1[1], loc1[2])
+    glVertex3f(loc2[0], loc2[1], loc2[2])
+    glEnd()
+
+def computeForces(springs, verts) :
+    force = np.zeros((len(verts),3), dtype=np.float64)
+    for i in range(0, len(springs)):
+        idx0 = springs[i][0]
+        idx1 = springs[i][1]
+        p0 = verts[idx0]
+        p1 = verts[idx1]
+        L = np.linalg.norm(p1 - p0)
+        dir = (p1 - p0) / L
+        d = L - L0[i]
+        F = K * d * dir
+        f_damp = -np.dot(Vel[idx0],dir)*damp*dir
+        force[idx0] = force[idx0] + F + f_damp
+        f_damp =  np.dot(Vel[idx1], -dir) * damp * dir
+        force[idx1] = force[idx1] - F + f_damp
+    return force
+
+
+def convertLongVector(x) :
+    longX = np.zeros(shape=(len(x)*3,))
+    for i in range(0, len(x)) :
+        for j in range(0,3) :
+            longX[i*3+j] = x[i,j]
+    return longX
+
+def set33SubMatrix(M, i, j, m) :
+    for row in range(0,3) :
+        for col in range(0,3) :
+            M[i*3+row, j*3+col] = m[row,col]
+
+def updateLocationWithMatrixImplicit(locs, force, vel, h) :
+    global Springs, L0, Mass, gravity, K
+    print(K)
+    deltaV = np.zeros(shape=(len(locs), 3))
+
+    for i in range(0, len(locs)) :
+        force[i] = force[i] + gravity
+    longF = convertLongVector(force)
+
+    bigM = np.zeros(shape=(len(locs) * 3, len(locs) * 3))
+    J    = np.zeros(shape=(len(locs) * 3, len(locs) * 3))
+
+    for i in range(0, len(locs)) :
+        M33 = np.array([
+            [Mass[i], 0, 0],
+            [0, Mass[i], 0],
+            [0, 0, Mass[i]]])
+
+        set33SubMatrix(bigM, i, i, M33)
+
+    Jii = np.zeros(shape=(len(locs),3,3))
+
+    for spring in range(0, len(Springs)) :
+        i = Springs[spring][0]
+        j = Springs[spring][1]
+        xji = locs[j]-locs[i]
+        lt = np.linalg.norm(xji)
+        diag = lt-L0[spring]/lt
+        s = L0[spring]/lt
+        Jij = np.array([
+            [diag + s*xji[0]*xji[0], s*xji[0]*xji[1], s*xji[0]*xji[2]],
+            [s*xji[1]*xji[0], diag + s*xji[1]*xji[1], s*xji[1]*xji[2]],
+            [s*xji[2]*xji[0], s*xji[2]*xji[1], diag+s*xji[2]*xji[2]]
+        ])
+
+
+        Jii[i] = Jii[i] - Jij
+        Jii[j] = Jii[j] - Jij
+        set33SubMatrix(J, i, i, Jij)
+
+    for i in range(0, len(locs)):
+        set33SubMatrix(J, i, i, Jii[i])
+
+    J = K*J
+
+    bigM = bigM - h*h*J
+
+    bigMinv = np.linalg.inv(bigM)
+
+    longV = convertLongVector(vel)
+    beta = bigM.dot(longV) * (h*h)
+
+    deltaV = bigMinv.dot(longF*h + beta)
+
+    for i in range(0, len(locs)):
+        vel[i] = vel[i] + [deltaV[i*3],deltaV[i*3+1],deltaV[i*3+2]]
+        if i is not 0 and i is not 2:
+            locs[i] = locs[i] + vel[i] * h
+
+
+
+def moveImplicit():
+    global Verts, Springs, Vel, Force, Mass, K, damp, L0, dt, gravity
+
+    # Force Initialization
+    Force = computeForces(Springs, Verts)
+
+    updateLocationWithMatrixImplicit(Verts, Force, Vel, dt)
+
+    glutPostRedisplay()  ## Hey! Draw Function! Draw!
+
+
+def draw():
+    global Verts, Springs, K
+    #K *= 1.01
+    glClear(GL_COLOR_BUFFER_BIT)
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    gluPerspective(60, 1.0, 0.1, 1000)
+    glMatrixMode(GL_MODELVIEW)
+    glLoadIdentity()
+    gluLookAt(0.5, 2.0, 5.0, 0.0, 2.0, 0.0, 0.0, 1.0, 0.0)
+
+    for i in range(0, len(Springs)):
+        drawSpring(Verts[Springs[i][0]], Verts[Springs[i][1]])
+    glFlush()
+
+
+def GLinit():
+    glClearColor(0.5, 0.5, 0.5, 1)
+
+
+glutInit(sys.argv)
+glutInitDisplayMode(GLUT_SINGLE | GLUT_RGBA)
+glutInitWindowSize(250, 250)
+glutInitWindowPosition(100, 100)
+glutCreateWindow(b"OpenGL with Python")
+GLinit()
+glutDisplayFunc(draw)
+glutIdleFunc(moveImplicit)
+glutMainLoop()
+
+# End of program
